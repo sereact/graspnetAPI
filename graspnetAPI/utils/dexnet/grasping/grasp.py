@@ -1,28 +1,3 @@
-# -*- coding: utf-8 -*-
-# """
-# Copyright ©2017. The Regents of the University of California (Regents). All Rights Reserved.
-# Permission to use, copy, modify, and distribute this software and its documentation for educational,
-# research, and not-for-profit purposes, without fee and without a signed licensing agreement, is
-# hereby granted, provided that the above copyright notice, this paragraph and the following two
-# paragraphs appear in all copies, modifications, and distributions. Contact The Office of Technology
-# Licensing, UC Berkeley, 2150 Shattuck Avenue, Suite 510, Berkeley, CA 94720-1620, (510) 643-
-# 7201, otl@berkeley.edu, http://ipira.berkeley.edu/industry-info for commercial licensing opportunities.
-#
-# IN NO EVENT SHALL REGENTS BE LIABLE TO ANY PARTY FOR DIRECT, INDIRECT, SPECIAL,
-# INCIDENTAL, OR CONSEQUENTIAL DAMAGES, INCLUDING LOST PROFITS, ARISING OUT OF
-# THE USE OF THIS SOFTWARE AND ITS DOCUMENTATION, EVEN IF REGENTS HAS BEEN
-# ADVISED OF THE POSSIBILITY OF SUCH DAMAGE.
-#
-# REGENTS SPECIFICALLY DISCLAIMS ANY WARRANTIES, INCLUDING, BUT NOT LIMITED TO,
-# THE IMPLIED WARRANTIES OF MERCHANTABILITY AND FITNESS FOR A PARTICULAR
-# PURPOSE. THE SOFTWARE AND ACCOMPANYING DOCUMENTATION, IF ANY, PROVIDED
-# HEREUNDER IS PROVIDED "AS IS". REGENTS HAS NO OBLIGATION TO PROVIDE
-# MAINTENANCE, SUPPORT, UPDATES, ENHANCEMENTS, OR MODIFICATIONS.
-# """
-# """
-# Grasp class that implements gripper endpoints and grasp functions
-# Authors: Jeff Mahler, with contributions from Jacky Liang and Nikhil Sharma
-# """
 from abc import ABCMeta, abstractmethod
 from copy import deepcopy
 import IPython
@@ -120,13 +95,20 @@ class ParallelJawPtGrasp3D(PointGrasp):
     """ Parallel Jaw point grasps in 3D space.
     """
 
-    def __init__(self, configuration, max_grasp_depth=0, frame='object', grasp_id=None):
+    def __init__(self, configuration=None, max_grasp_depth=0, frame='object', grasp_id=None):
         # get parameters from configuration array
-        grasp_center, grasp_axis, grasp_width, grasp_angle, jaw_width, min_grasp_width = \
-            ParallelJawPtGrasp3D.params_from_configuration(configuration)
-
+        grasp_center = None
+        grasp_axis = None
+        grasp_width = None
+        grasp_angle = None
+        jaw_width = 0.02
+        min_grasp_width = None
+        if configuration is not None:
+            grasp_center, grasp_axis, grasp_width, grasp_angle, jaw_width, min_grasp_width = ParallelJawPtGrasp3D.params_from_configuration(configuration)
+            grasp_axis /= np.linalg.norm(grasp_axis)
+        
         self.center_ = grasp_center
-        self.axis_ = grasp_axis / np.linalg.norm(grasp_axis)
+        self.axis_ = grasp_axis 
         self.max_grasp_width_ = grasp_width
         self.jaw_width_ = jaw_width
         self.min_grasp_width_ = min_grasp_width
@@ -134,7 +116,51 @@ class ParallelJawPtGrasp3D(PointGrasp):
         self.frame_ = frame
         self.grasp_id_ = grasp_id
         self.max_grasp_depth = max_grasp_depth
+        self.contacts = []
+        self.query = None
+        self.gripper = None
+        self.angle = None
+    
+    def update(self, contacts, query, angle):
+        self.contacts = np.asarray(contacts)
+        self.query = np.asarray(query)
+        self.angle = angle
 
+    def export(self):
+        return np.asarray([self.contacts.flatten(), 
+                    self.query.flatten(),
+                    self.angle,
+                    self.center,
+                    self.axis.flatten(),
+                    self.width,
+                    self.approach_angle
+                    ]).reshape(14,)
+        
+    @classmethod
+    def from_npy(cls,data):
+        grasp = cls()
+        assert len(data) == 14, 'numpy array must have length 14'
+        grasp.contacts = data[:3]
+        grasp.query = np.asarray(data[3:6])
+        grasp.angle = data[6]
+        grasp.center_ = data[7:10]
+        grasp.axis_ = data[10:13] 
+        grasp.max_grasp_width_ = data[13]
+        grasp.approach_angle_ = data[14]
+        return grasp
+    
+    @property
+    def depth(self):
+        return np.sqrt(((self.center-self.query)**2).sum())
+    
+    @property
+    def R(self):
+        return self.T_grasp_obj.matrix[:3,:3]
+    
+    @property
+    def width(self):
+        return self.open_width
+    
     @property
     def center(self):
         """ :obj:`numpy.ndarray` : 3-vector specifying the center of the jaws """
