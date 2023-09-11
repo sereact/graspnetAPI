@@ -15,7 +15,22 @@ from ..abstractstatic import abstractstatic
 from .contacts import Contact3D
 from .graspable_object import GraspableObject3D
 
-
+def transform_points(points, trans):
+    '''
+    **Input:**
+    
+    - points: (N, 3)
+    
+    - trans: (4, 4)
+    
+    **Output:**
+    - points_trans: (N, 3)
+    '''
+    ones = np.ones([points.shape[0],1], dtype=points.dtype)
+    points_ = np.concatenate([points, ones], axis=-1)
+    points_ = np.matmul(trans, points_.T).T
+    points_trans = points_[:,:3]
+    return points_trans
 # class Grasp(object, metaclass=ABCMeta):
 class Grasp(object):
     """ Abstract grasp class.
@@ -127,15 +142,20 @@ class ParallelJawPtGrasp3D(PointGrasp):
         self.angle = angle
 
     def export(self):
-        return np.asarray([self.contacts.flatten(), 
-                    self.query.flatten(),
-                    self.angle,
-                    self.center,
-                    self.axis.flatten(),
-                    self.width,
-                    self.approach_angle
-                    ]).reshape(14,)
-        
+        """
+        angle: Sum of angles at contact points
+        query: the point of the surface of the obj for sampling the grasp
+        """
+        return np.asarray([
+            self.contacts.flatten(), 
+            self.query.flatten(),
+            self.angle,
+            self.center,
+            self.axis.flatten(),
+            self.width,
+            self.approach_angle
+        ]).reshape(14,)
+    
     @classmethod
     def from_npy(cls,data):
         grasp = cls()
@@ -148,6 +168,21 @@ class ParallelJawPtGrasp3D(PointGrasp):
         grasp.max_grasp_width_ = data[13]
         grasp.approach_angle_ = data[14]
         return grasp
+
+    def transform(self, T):
+        """
+        Only used for proj_pj_grasps. Do not trust it for other shits
+        """
+        self.gripper.transform(T)
+        self.center = transform_points(self.center, T)
+        self.query = transform_points(self.query, T)
+        for i,c in enumerate(self.contacts):
+            self.contacts[i] = transform_points(c, T)
+
+    @property
+    def aprroach_axis(self):
+        axis = self.center - self.query
+        return axis / np.linalg.norm(axis)
     
     @property
     def depth(self):
