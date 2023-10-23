@@ -135,38 +135,42 @@ class ParallelJawPtGrasp3D(PointGrasp):
         self.query = None
         self.gripper = None
         self.angle = None
+        self.score = None
     
-    def update(self, contacts, query, angle):
+    def update(self, contacts, query, angle, score):
         self.contacts = np.asarray(contacts)
         self.query = np.asarray(query)
         self.angle = angle
+        self.score = score
 
     def export(self):
         """
         angle: Sum of angles at contact points
         query: the point of the surface of the obj for sampling the grasp
         """
-        return np.asarray([
+        return np.hstack([
             self.contacts.flatten(), 
             self.query.flatten(),
-            self.angle,
-            self.center,
+            np.asarray(self.angle),
+            np.asarray(self.center).flatten(),
             self.axis.flatten(),
-            self.width,
-            self.approach_angle
-        ]).reshape(14,)
+            np.asarray(self.width),
+            np.asarray(self.approach_angle),
+            np.asarray(self.score)
+        ]).reshape(19,)
     
     @classmethod
     def from_npy(cls,data):
         grasp = cls()
-        assert len(data) == 14, 'numpy array must have length 14'
-        grasp.contacts = data[:3]
-        grasp.query = np.asarray(data[3:6])
-        grasp.angle = data[6]
-        grasp.center_ = data[7:10]
-        grasp.axis_ = data[10:13] 
-        grasp.max_grasp_width_ = data[13]
-        grasp.approach_angle_ = data[14]
+        assert len(data) == 19, 'numpy array must have length 18'
+        grasp.contacts = data[:6].reshape(2,3)
+        grasp.query = np.asarray(data[6:9])
+        grasp.angle = data[9]
+        grasp.center_ = data[10:13]
+        grasp.axis_ = data[13:16] 
+        grasp.max_grasp_width_ = data[16]
+        grasp.approach_angle_ = data[17]
+        grasp.score = data[18]
         return grasp
 
     def transform(self, T):
@@ -174,13 +178,13 @@ class ParallelJawPtGrasp3D(PointGrasp):
         Only used for proj_pj_grasps. Do not trust it for other shits
         """
         self.gripper.transform(T)
-        self.center = transform_points(self.center, T)
-        self.query = transform_points(self.query, T)
+        self.center = transform_points(self.center[None,...], T)[0]
+        self.query = transform_points(self.query[None,...], T)[0]
         for i,c in enumerate(self.contacts):
-            self.contacts[i] = transform_points(c, T)
+            self.contacts[i] = transform_points(c[None,...], T)[0]
 
     @property
-    def aprroach_axis(self):
+    def approach_axis(self):
         axis = self.center - self.query
         return axis / np.linalg.norm(axis)
     
