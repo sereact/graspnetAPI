@@ -162,7 +162,7 @@ class ParallelJawPtGrasp3D(PointGrasp):
     @classmethod
     def from_npy(cls,data):
         grasp = cls()
-        assert len(data) == 19, 'numpy array must have length 18'
+        # assert len(data) == 19, 'numpy array must have length 18'
         grasp.contacts = data[:6].reshape(2,3)
         grasp.query = np.asarray(data[6:9])
         grasp.angle = data[9]
